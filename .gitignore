@@ -193,3 +193,9 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# huggingface
+#  Hugging Face Hub configuration file, which may contain API tokens and other sensitive information.
+#  Refer to https://huggingface.co/docs/huggingface_hub/how-tos/hf-cli#hf-cli-login for more details.
+.huggingface/
+.hf/

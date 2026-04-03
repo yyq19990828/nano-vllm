@@ -48,7 +48,9 @@ class RotaryEmbedding(nn.Module):
         return query, key
 
 
-@lru_cache(1)
+_rope_cache: RotaryEmbedding | None = None
+
+
 def get_rope(
     head_size: int,
     rotary_dim: int,
@@ -56,6 +58,10 @@ def get_rope(
     base: float,
     rope_scaling: dict | None = None,
 ):
-    assert rope_scaling is None
-    rotary_emb = RotaryEmbedding(head_size, rotary_dim, max_position, base)
-    return rotary_emb
+    global _rope_cache
+    if _rope_cache is not None:
+        return _rope_cache
+    assert rope_scaling is None or rope_scaling.get("rope_type") in (None, "default"), \
+        f"Unsupported rope_scaling type: {rope_scaling}"
+    _rope_cache = RotaryEmbedding(head_size, rotary_dim, max_position, base)
+    return _rope_cache

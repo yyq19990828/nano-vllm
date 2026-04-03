@@ -22,6 +22,33 @@ dependencies = [
 [project.urls]
 Homepage="https://github.com/GeeeekExplorer/nano-vllm"
 
+[dependency-groups]
+dev = [
+    "setuptools>=70.1",
+    "wheel",
+    "ninja",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["nanovllm*"]
+
+[tool.uv]
+required-version = ">=0.10.0"
+# flash-attn does not declare torch in build-system.requires; inject it for isolated builds.
+extra-build-dependencies = { flash-attn = ["torch", "ninja"] }
+
+extra-build-variables = { flash-attn = { MAX_JOBS = "4" } }
+
+[[tool.uv.index]]
+name = "nju-pypi"
+url = "https://mirror.nju.edu.cn/pypi/web/simple/"
+default = true
+
+[[tool.uv.index]]
+name = "nju-pytorch-cu128"
+url = "https://mirror.nju.edu.cn/pytorch/whl/cu128/"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "nju-pytorch-cu128" }
