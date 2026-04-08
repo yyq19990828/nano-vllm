@@ -199,3 +199,9 @@ cython_debug/
 #  Refer to https://huggingface.co/docs/huggingface_hub/how-tos/hf-cli#hf-cli-login for more details.
 .huggingface/
 .hf/
+
+# Claude Code local configuration
+.claude/
+
+# graphify auto-generated knowledge graph
+graphify-out/

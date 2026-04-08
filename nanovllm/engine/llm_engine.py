@@ -64,12 +64,12 @@ class LLMEngine:
     ) -> list[str]:
         if use_tqdm:
             pbar = tqdm(total=len(prompts), desc="Generating", dynamic_ncols=True)
-        if not isinstance(sampling_params, list):
+        if not isinstance(sampling_params, list): #* 复制到和prompt一样的长度
             sampling_params = [sampling_params] * len(prompts)
         for prompt, sp in zip(prompts, sampling_params):
-            self.add_request(prompt, sp)
+            self.add_request(prompt, sp) #* 封装成Sequence对象并添加到调度器
         outputs = {}
-        prefill_throughput = decode_throughput = 0.
+        prefill_throughput = decode_throughput = 0. #* 预填充和解码的吞吐量, 用于 tqdm 显示
         while not self.is_finished():
             t = perf_counter()
             output, num_tokens = self.step()

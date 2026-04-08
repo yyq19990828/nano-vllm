@@ -23,7 +23,7 @@ class Scheduler:
 
     def schedule(self) -> tuple[list[Sequence], bool]:
         # prefill
-        scheduled_seqs = []
+        scheduled_seqs = [] #* 存放本次调度的序列
         num_seqs = 0
         num_batched_tokens = 0
         while self.waiting and num_seqs < self.max_num_seqs:
@@ -31,7 +31,7 @@ class Scheduler:
             if num_batched_tokens + len(seq) > self.max_num_batched_tokens or not self.block_manager.can_allocate(seq):
                 break
             num_seqs += 1
-            self.block_manager.allocate(seq)
+            self.block_manager.allocate(seq) #* 为序列分配 KV cache 块, 这里假设每个序列最多占用一个块, 因此只要检查是否有足够的空闲块即可, 不需要考虑块内碎片问题
             num_batched_tokens += len(seq) - seq.num_cached_tokens
             seq.status = SequenceStatus.RUNNING
             self.waiting.popleft()
@@ -57,12 +57,12 @@ class Scheduler:
         self.running.extendleft(reversed(scheduled_seqs))
         return scheduled_seqs, False
 
-    def preempt(self, seq: Sequence):
+    def preempt(self, seq: Sequence): #* 将正在运行的序列抢占下来, 放回等待队列, 以腾出 KV cache 块给其他序列使用
         seq.status = SequenceStatus.WAITING
         self.block_manager.deallocate(seq)
         self.waiting.appendleft(seq)
 
-    def postprocess(self, seqs: list[Sequence], token_ids: list[int]) -> list[bool]:
+    def postprocess(self, seqs: list[Sequence], token_ids: list[int]) -> None: #* 把新的token存入序列, 清理完成的序列
         for seq, token_id in zip(seqs, token_ids):
             seq.append_token(token_id)
             if (not seq.ignore_eos and token_id == self.eos) or seq.num_completion_tokens == seq.max_tokens:

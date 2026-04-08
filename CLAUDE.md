@@ -53,3 +53,12 @@ Python 3.10-3.12, PyTorch >= 2.4, triton >= 3.0, transformers >= 4.51, flash-att
 1. Create `nanovllm/models/<name>.py` with a `ForCausalLM` class following the Qwen3 pattern
 2. Define `packed_modules_mapping` for weight sharding
 3. Update the import in `model_runner.py` to select the model class based on config
+
+## graphify
+
+This project has a graphify knowledge graph at graphify-out/.
+
+Rules:
+- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
+- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
+- After modifying code files in this session, run `python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"` to keep the graph current

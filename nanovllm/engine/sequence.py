@@ -5,7 +5,7 @@ from itertools import count
 from nanovllm.sampling_params import SamplingParams
 
 
-class SequenceStatus(Enum):
+class SequenceStatus(Enum): #* 序列状态的枚举类
     WAITING = auto()
     RUNNING = auto()
     FINISHED = auto()
@@ -16,14 +16,14 @@ class Sequence:
     counter = count()
 
     def __init__(self, token_ids: list[int], sampling_params = SamplingParams()):
-        self.seq_id = next(Sequence.counter)
+        self.seq_id = next(Sequence.counter) #* 为每个序列分配一个唯一的 ID, 以便在调度和模型运行过程中进行跟踪
         self.status = SequenceStatus.WAITING
-        self.token_ids = copy(token_ids)
+        self.token_ids = copy(token_ids) #* 浅拷贝输入的 token_ids 列表, 以避免在后续操作中修改原列表
         self.last_token = token_ids[-1]
-        self.num_tokens = len(self.token_ids)
-        self.num_prompt_tokens = len(token_ids)
-        self.num_cached_tokens = 0
-        self.block_table = []
+        self.num_tokens = len(self.token_ids) #* 序列的总 token 数, 包括 prompt 和 completion 的 token
+        self.num_prompt_tokens = len(token_ids) #* prompt token 数, 在序列生成过程中保持不变, 用于区分 prompt 和 completion 的 token
+        self.num_cached_tokens = 0 #* 已经缓存到 KV cache 中的 token 数, 用于调度时判断是否需要分配新的 KV cache 块
+        self.block_table = [] #* 存放序列占用的 KV cache 块的 ID, 用于调度时分配和回收 KV cache 块
         self.temperature = sampling_params.temperature
         self.max_tokens = sampling_params.max_tokens
         self.ignore_eos = sampling_params.ignore_eos
