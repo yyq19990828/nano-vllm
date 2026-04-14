@@ -343,6 +343,30 @@ method(*args) ◄──── NCCL 同步 ────►       method(*args)
 **类比**：留言板（shm）+ 门铃（event）。rank0 写完留言后按门铃，worker 听到铃声跑来看板子，
 看完回屋等下一次铃声。
 
+### Q5: pickle 库的作用是什么？
+
+Python 标准库，用于**对象序列化**：把任意 Python 对象转成字节流，再从字节流还原回对象。
+
+**核心 API**：
+```python
+data = pickle.dumps(obj)      # 对象 → bytes
+obj  = pickle.loads(data)     # bytes → 对象
+```
+
+**支持的类型**：列表/字典/元组、NumPy 数组、CPU tensor、自定义类实例（类定义必须可导入）。
+不支持：文件句柄、socket、lambda、CUDA tensor（需先 `.cpu()`）。
+
+**自定义序列化**：类可定义 `__getstate__` / `__setstate__` 控制内容。nano-vllm 的 Sequence
+就用这个优化了 decode 阶段的传输量（只传 `last_token` 而非完整 `token_ids`，见 sequence.py:74-83）。
+
+**在 nano-vllm 中**：rank0 通过 `pickle.dumps([method_name, *args])` 把 Sequence 列表
+序列化后写入 SharedMemory，worker 端 `pickle.loads` 还原出结构完全一致的对象。
+
+**注意事项**：
+- ⚠️ **不安全**：`pickle.loads` 可执行任意代码，绝不能反序列化不受信任的数据
+- 仅限 Python，体积不如 protobuf/msgpack 紧凑
+- nano-vllm 是单机多进程受控场景，这些缺点不构成问题
+
 ## 遗留问题
 
 - [ ] CUDA Graph 录制时 `from_pool` 共享 memory pool 的具体行为？显存是复用还是叠加？

@@ -16,7 +16,7 @@ class LinearBase(nn.Module):
         input_size: int,
         output_size: int,
         bias: bool = False,
-        tp_dim: int | None = None,
+        tp_dim: int | None = None, #* tp_dim 表示权重被切分的维度，0 表示输出维度被切分，1 表示输入维度被切分，None 表示不切分
     ):
         super().__init__()
         self.tp_dim = tp_dim

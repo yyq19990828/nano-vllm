@@ -57,7 +57,7 @@ class ModelRunner:
                 dist.barrier()  #* 等待所有 worker 准备好
             else:
                 dist.barrier()
-                self.shm = SharedMemory(name="nanovllm")
+                self.shm = SharedMemory(name="nanovllm") #* 其余 worker 连接到同一块共享内存
                 self.loop()  #* worker 阻塞在此, 等待 rank0 通过 shm 分发指令
 
     def exit(self):
@@ -85,14 +85,14 @@ class ModelRunner:
         assert self.world_size > 1 and self.rank > 0
         self.event.wait()   #* 阻塞直到 rank0 set() 通知
         n = int.from_bytes(self.shm.buf[0:4], "little")
-        method_name, *args = pickle.loads(self.shm.buf[4:n+4])
+        method_name, *args = pickle.loads(self.shm.buf[4:n+4]) #* 用pickle 反序列化得到方法名和参数
         self.event.clear()  #* 重置事件, 等待下一次通知
         return method_name, args
 
     def write_shm(self, method_name, *args):
         """Rank0 将指令写入共享内存并通知所有 worker"""
         assert self.world_size > 1 and self.rank == 0
-        data = pickle.dumps([method_name, *args])
+        data = pickle.dumps([method_name, *args]) #* 用 pickle 序列化方法名和参数, 转为字节流
         n = len(data)
         self.shm.buf[0:4] = n.to_bytes(4, "little")
         self.shm.buf[4:n+4] = data
@@ -117,7 +117,7 @@ class ModelRunner:
         self.run(seqs, True)  #* prefill 模式前向, 触发所有中间 tensor 的分配
         torch.cuda.empty_cache()  #* 释放临时 tensor, 但峰值记录已保留
 
-    def allocate_kv_cache(self):
+    def allocate_kv_cache(self): #* 以一张卡为单位(当前rank能看见的GPU)
         """根据 warmup 测得的峰值显存, 计算剩余空间能容纳多少 KV cache 块, 并一次性分配"""
         config = self.config
         hf_config = config.hf_config
@@ -151,7 +151,7 @@ class ModelRunner:
         return block_tables
 
     def prepare_prefill(self, seqs: list[Sequence]):
-        """Prefill 阶段数据准备: 将 Sequence 列表转换为 flash-attention 所需的 GPU tensor
+        """Prefill 阶段数据准备: 将 Sequence 列表转换为 flash-attention 所需的 GPU tensor (fa 把所有输入当成一个大 batch 一起处理, 以充分利用并行度)
         关键: 有前缀缓存时, Q 长度(需要计算的) < K 长度(需要 attend 到的全部上下文)"""
         input_ids = []
         positions = []
