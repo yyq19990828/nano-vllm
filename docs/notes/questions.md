@@ -257,3 +257,22 @@
   - **nano-vllm 只实现 TP**: 推理场景最能解决"单卡装不下", 且 NVLink 上的 AllReduce 开销可接受
 - 状态: 已解决
 
+### [2026-04-16] `torch.narrow` 到底做什么? 为什么 weight_loader 里到处用它?
+- 来源: `nanovllm/layers/linear.py:69/91/126/146` 的 `loaded_weight.narrow(...)` / `param_data.narrow(...)`
+- 解答:
+  - **定位**: 在指定维度上取一段连续切片, **返回视图 (view)** 而非副本 —— 和原 tensor 共享存储, 零拷贝
+  - **签名**: `tensor.narrow(dim, start, length)` → 在 `dim` 维上从 `start` 截取长度为 `length` 的子张量, 形状除 `dim` 外其它维都不变
+  - **等价写法**: `narrow(0, s, L)` ≡ `tensor[s:s+L]`, `narrow(1, s, L)` ≡ `tensor[:, s:s+L]`. 差别只在于 narrow 的 dim 是参数, 可以**动态**指定(代码里 `self.tp_dim` 是 0 或 1, 用 narrow 一行写完; 用切片语法要 `if tp_dim==0: t[s:s+L] else: t[:, s:s+L]`)
+  - **view 语义的关键**:
+    - 返回值和原 tensor 共享存储, **写入会传染**. 所以 nano-vllm 里 `param_data = param.data.narrow(...)` 后 `param_data.copy_(loaded_weight)` 能把数据写回原 param 的对应段 —— 这是"把 shard 写入合并权重的特定段"能成立的基础
+    - 必须是连续段, 不能跳步. `narrow(0, 2, 5)` 取 index 2..6; 如果要不连续索引得用 `index_select` (会拷贝)
+  - **nano-vllm 里的两种用法**:
+    1. **切"远端"的 loaded_weight**: `ColumnParallelLinear.weight_loader` 里 `loaded_weight.narrow(tp_dim, start_idx, shard_size)` —— 从 HF 的完整权重里**只取本 rank 那一段**再 copy 到 GPU, 避免把全量数据搬到显存 (TP=8 时每 rank 只传 1/8)
+    2. **切"本地"的 param_data**: `MergedColumnParallelLinear.weight_loader` 里 `param_data = param_data.narrow(tp_dim, shard_offset, shard_size)` —— 先把合并 param 的**目标段**取成 view, 再 copy 到这个 view 就等于写入合并 param 的指定偏移. 这是 gate/up 或 q/k/v 分别加载到同一 param 不同段的实现手段
+  - **为什么不用 `chunk` / `split`**:
+    - `chunk(n, dim)` 一次切成 n 份, 要取第 k 份得 `chunk(...)[k]`, 内部同样是 view; nano-vllm 里**两种都用了** —— `loaded_weight.chunk(tp_size, tp_dim)[tp_rank]` 用来按 tp 均匀切, `narrow` 用来按任意偏移切(非均等的 shard_offset/shard_size)
+    - narrow 的优势是**任意 `(start, length)`**, 适合 merged param 里每段偏移不一的情况; chunk 只能等分
+  - **和 `torch.slice` / `__getitem__` 的关系**: 底层都是 as_strided, 语义等价. narrow 更"显式", 多参数形式更适合在循环/动态 dim 场景里写
+  - **坑**: (1) narrow 返回 view, 如果对返回值做 in-place 修改会改到原 tensor, 反之亦然 —— 这正是 weight_loader 故意利用的特性, 但调试时要留意 (2) view 不连续时(比如 narrow 之后想做 reshape), 可能需要 `.contiguous()` 显式拷贝
+- 状态: 已解决
+
